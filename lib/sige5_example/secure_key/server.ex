@@ -20,6 +20,7 @@ defmodule Sige5Example.SecureKey.Server do
   require Logger
 
   @tool "/usr/bin/optee-key"
+  @ta_dir "/lib/optee_armtz"
   @timeout 15_000
 
   def start_link(opts) do
@@ -55,6 +56,19 @@ defmodule Sige5Example.SecureKey.Server do
         Logger.warning("[SecureKey] #{@tool} is missing")
         :ignore
 
+      not ta_present?() ->
+        # A secure world with no trusted application to load. The helper
+        # would exit immediately and take the supervisor's restart budget -
+        # and the whole application - down with it. Nothing else here needs
+        # the key, so run without it and say why.
+        Logger.warning(
+          "[SecureKey] /dev/tee0 is present but no TA in #{@ta_dir}; " <>
+            "the bootloader carries a secure world this image was not built " <>
+            "against. Device key unavailable."
+        )
+
+        :ignore
+
       true ->
         # The PIN goes in the environment, not the arguments: this process
         # runs for the lifetime of the node, and /proc/<pid>/cmdline is
@@ -83,11 +97,26 @@ defmodule Sige5Example.SecureKey.Server do
 
   @impl GenServer
   def handle_info({port, {:exit_status, status}}, %{port: port} = state) do
-    # Let the supervisor restart it rather than limping on a dead helper
-    {:stop, {:helper_exited, status}, state}
+    # A helper that dies on startup dies every time, so restarting it just
+    # spends the supervisor's budget and takes the application with it -
+    # which on a newly installed firmware means the validator never runs and
+    # the board rolls back. Stop normally instead: signing is unavailable,
+    # everything else keeps running, and available?/0 reports it.
+    Logger.error("[SecureKey] optee-key exited #{status}; signing unavailable")
+    {:stop, :normal, state}
   end
 
   def handle_info(_message, state), do: {:noreply, state}
+
+  # The PKCS#11 TA is loaded from the filesystem by tee-supplicant. Without it
+  # optee-key cannot open a session, so check before spawning rather than
+  # discovering it through an exit status.
+  defp ta_present? do
+    case File.ls(@ta_dir) do
+      {:ok, files} -> Enum.any?(files, &String.ends_with?(&1, ".ta"))
+      _ -> false
+    end
+  end
 
   defp request(port, line) do
     Port.command(port, line <> "\n")
