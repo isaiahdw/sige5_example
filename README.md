@@ -28,7 +28,7 @@ export SIGE5_WIFI_PSK="your-password"
 ```
 
 Without them the image ships no WiFi configuration; wired and the usb0 gadget
-still work, and a network can be added at runtime with `VintageNet.configure/2`.
+still work, and `VintageNet.configure/2` adds a network at runtime.
 
 First flash goes over USB maskrom, which writes the bootloader and filesystems
 in one image — see
@@ -54,11 +54,9 @@ signatures. Taking the eMMC yields ciphertext.
 Provisioning takes two machines. The device creates the key and asks for a
 certificate; your machine signs it with a CA.
 
-That split is the point of the CA: a device can always make a key and sign for
-itself, but only whoever holds the CA key can issue a certificate the fleet
-trusts. So the CA key must never be on a device — anything holding it can issue
-an identity for any board. In production it belongs in an HSM or on an offline
-machine rather than a working directory.
+Only whoever holds the CA key can issue a certificate the fleet trusts, so keep
+it off devices — anything holding it can issue an identity for any board. In
+production it belongs in an HSM or on an offline machine.
 
 From your machine, in one step:
 
@@ -79,20 +77,18 @@ iex> Sige5Example.SecureKey.provision()
 iex> Sige5Example.SecureKey.store_certificate(pem)
 ```
 
-What this protects: nobody who takes the board or reads the filesystem can
-obtain the private key, because no copy of it exists outside the trusted
-application. What it does not: code already running as root can ask the secure
-world to sign, the same as any hardware key without a per-use PIN. The token
-PIN in the source is not a secret and cannot be one — the device boots
-unattended.
+No copy of the private key exists outside the trusted application, so taking
+the board or reading the filesystem does not yield it. Code already running as
+root can still ask the secure world to sign, the same as any hardware key
+without a per-use PIN; the token PIN in the source is not a secret, because the
+device boots unattended.
 
 ### How it fits together
 
 `Sige5Example.SecureKey.Server` keeps `/usr/bin/optee-key` running with one TEE
 session open and exchanges a line per request, so many signatures cost one
-process. The token PIN reaches it in the environment rather than the arguments,
-since that process runs for the life of the node and `/proc/<pid>/cmdline` is
-readable by anything on the system. TLS reaches the key through `:ssl`'s
+process. The token PIN reaches it in the environment, since `/proc/<pid>/cmdline`
+is readable by anything on the system. TLS reaches the key through `:ssl`'s
 `sign_fun` callback:
 
 ```elixir
