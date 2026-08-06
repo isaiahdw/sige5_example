@@ -90,7 +90,10 @@ unattended.
 
 `Sige5Example.SecureKey.Server` keeps `/usr/bin/optee-key` running with one TEE
 session open and exchanges a line per request, so many signatures cost one
-process. TLS reaches the key through `:ssl`'s `sign_fun` callback:
+process. The token PIN reaches it in the environment rather than the arguments,
+since that process runs for the life of the node and `/proc/<pid>/cmdline` is
+readable by anything on the system. TLS reaches the key through `:ssl`'s
+`sign_fun` callback:
 
 ```elixir
 key: %{algorithm: :ecdsa, sign_fun: &Sige5Example.SecureKey.sign/3}

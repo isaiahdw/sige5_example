@@ -56,12 +56,16 @@ defmodule Sige5Example.SecureKey.Server do
         :ignore
 
       true ->
+        # The PIN goes in the environment, not the arguments: this process
+        # runs for the lifetime of the node, and /proc/<pid>/cmdline is
+        # readable by anything on the system.
         port =
           Port.open({:spawn_executable, @tool}, [
             :binary,
             :exit_status,
             {:line, 4096},
-            {:args, ["serve", token, pin, key]}
+            {:args, ["serve", token, key]},
+            {:env, [{~c"OPTEE_KEY_PIN", String.to_charlist(pin)}]}
           ])
 
         {:ok, %{port: port}}

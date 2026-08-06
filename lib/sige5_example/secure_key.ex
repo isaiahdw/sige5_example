@@ -158,12 +158,12 @@ defmodule Sige5Example.SecureKey do
 
     unless token_initialised?() do
       Logger.info("[SecureKey] initialising the PKCS #11 token")
-      {:ok, _} = run(["init", @token, @so_pin, @pin])
+      {:ok, _} = run(["init", @token], so_pin: true)
     end
 
     if force or not key_present?() do
       Logger.info("[SecureKey] generating an EC P-256 key inside the secure world")
-      {:ok, _} = run(["generate", @token, @pin, @key_label])
+      {:ok, _} = run(["generate", @token, @key_label])
     end
 
     :ok
@@ -176,7 +176,7 @@ defmodule Sige5Example.SecureKey do
     end
   end
 
-  defp key_present?, do: match?({:ok, _}, run(["pubkey", @token, @pin, @key_label]))
+  defp key_present?, do: match?({:ok, _}, run(["pubkey", @token, @key_label]))
 
   @doc false
   def server_child_spec,
@@ -215,8 +215,14 @@ defmodule Sige5Example.SecureKey do
   # whatever process calls it, and :ssl calls sign/3 inline in its connection
   # process - the helper's {:EXIT, port, :normal} then lands in the TLS state
   # machine's mailbox, which logs it as an unexpected INFO message.
-  defp run(args) do
-    task = Task.async(fn -> System.cmd(@tool, args, stderr_to_stdout: true) end)
+  # PINs go in the environment. /proc/<pid>/cmdline is world-readable, so an
+  # argument is visible to every process for as long as the command runs.
+  defp run(args, opts \\ []) do
+    env = [{"OPTEE_KEY_PIN", @pin}]
+    env = if opts[:so_pin], do: [{"OPTEE_KEY_SO_PIN", @so_pin} | env], else: env
+
+    task =
+      Task.async(fn -> System.cmd(@tool, args, stderr_to_stdout: true, env: env) end)
 
     case Task.await(task, 30_000) do
       {out, 0} -> {:ok, out}
