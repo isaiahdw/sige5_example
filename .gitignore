@@ -1,0 +1,8 @@
+/_build/
+/deps/
+/.nerves/
+*.fw
+erl_crash.dump
+/log/
+flutter/out/
+.DS_Store
