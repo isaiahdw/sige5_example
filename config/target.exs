@@ -46,6 +46,12 @@ config :nerves_ssh,
 # Without them the image simply ships no WiFi configuration; wired and the
 # usb0 gadget still come up, and a network can be added at runtime with
 # VintageNet.configure/2.
+#
+# That silence is a trap on a board reached over WiFi, so it is announced.
+# Building without either variable is legitimate - a wired device needs no
+# credentials - but it has to be a choice rather than a forgotten export,
+# because the resulting image looks identical and drops the link on flash.
+# Setting only one of them is never intentional, and fails the build.
 wifi =
   case {System.get_env("SIGE5_WIFI_SSID"), System.get_env("SIGE5_WIFI_PSK")} do
     {ssid, psk} when is_binary(ssid) and is_binary(psk) ->
@@ -60,8 +66,24 @@ wifi =
          }}
       ]
 
-    _ ->
+    {nil, nil} ->
+      IO.puts(:stderr, """
+
+      ==> no WiFi configuration in this image
+          SIGE5_WIFI_SSID and SIGE5_WIFI_PSK are unset. Flashing this to a
+          board whose only route is wlan0 will make it unreachable.
+      """)
+
       []
+
+    {ssid, _psk} ->
+      missing = if is_binary(ssid), do: "SIGE5_WIFI_PSK", else: "SIGE5_WIFI_SSID"
+
+      raise """
+      #{missing} is not set, but the other half of the WiFi credentials is.
+
+      Set both to configure WiFi, or neither to build an image without it.
+      """
   end
 
 # Networking: wired first (the RTL8211F PHY path we most want to verify),
