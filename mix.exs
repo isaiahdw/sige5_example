@@ -46,6 +46,9 @@ defmodule Sige5Example.MixProject do
       # console.
       {:nerves_hub_link, "~> 2.12", targets: @all_targets},
 
+      # Certificates, on the device and in mix sige5.provision
+      {:x509, "~> 0.8"},
+
       # supervises tee-supplicant, which the secure world needs to store keys
       {:muontrap, "~> 1.5", targets: @all_targets},
 

@@ -51,22 +51,27 @@ read. The key is generated inside OP-TEE's PKCS #11 token, marked sensitive and
 non-extractable; signing happens in TrustZone and Linux only ever sees
 signatures. Taking the eMMC yields ciphertext.
 
-Provision a device in one step, from your machine:
+Provisioning takes two machines. The device creates the key and asks for a
+certificate; your machine signs it with a CA.
+
+That split is the point of the CA: a device can always make a key and sign for
+itself, but only whoever holds the CA key can issue a certificate the fleet
+trusts. So the CA key must never be on a device — anything holding it can issue
+an identity for any board. In production it belongs in an HSM or on an offline
+machine rather than a working directory.
+
+From your machine, in one step:
 
 ```sh
-./scripts/provision-device.sh sige5.local
+mix sige5.provision sige5.local
 ```
 
-That asks the device for a certificate request, signs it with the device CA
-(creating the CA the first time), installs the certificate, and prints the
-serial number to register in NervesHub. Add a device with that serial number
-and upload the certificate against it.
+That fetches the request, signs it with the device CA (creating the CA the
+first time), installs the certificate, and prints the serial number. Add a
+device with that serial number in NervesHub and upload the certificate
+against it.
 
-The CA's private key stays on your machine and never goes to a device —
-anything holding it can issue an identity for any board. That is the one part
-the device cannot do for itself; everything else the script handles.
-
-The individual steps, if you want them:
+The device half on its own, if you want to move the request by hand:
 
 ```elixir
 iex> Sige5Example.SecureKey.provision()

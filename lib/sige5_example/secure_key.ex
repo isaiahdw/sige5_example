@@ -17,9 +17,9 @@ defmodule Sige5Example.SecureKey do
       }
 
   The request is signed by the key in the secure world, so a CSR that verifies
-  is evidence the key works. Sign it with `scripts/device-ca.sh sign`, add the
-  device to NervesHub under the serial number and upload the certificate
-  against it, then put the certificate back with `store_certificate/1`.
+  is evidence the key works. `mix sige5.provision` signs it with the device CA
+  and installs the result; by hand, sign the request on a machine holding the
+  CA key and put the certificate back with `store_certificate/1`.
 
   What this protects against: nobody who takes the eMMC or reads the
   filesystem can obtain the private key, because there is no copy of it to
@@ -67,8 +67,8 @@ defmodule Sige5Example.SecureKey do
   @doc """
   A certificate signing request for the device key, as PEM.
 
-  Sign it with `scripts/device-ca.sh` and upload the resulting certificate to
-  NervesHub against this device's serial number.
+  Sign it on a machine that holds the CA key - `mix sige5.provision` does
+  that - and upload the certificate to NervesHub against this serial number.
   """
   @spec csr() :: String.t()
   def csr do
