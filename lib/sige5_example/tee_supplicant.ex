@@ -18,6 +18,13 @@ defmodule Sige5Example.TeeSupplicant do
 
   require Logger
 
+  # vintage_net and muontrap are target-only deps, so a host compile cannot see
+  # them and warns on every reference. The code behind them only runs on a
+  # target - Application.start/2 gives :host an empty child list - so the
+  # warnings are noise rather than a signal, and silencing them keeps a real
+  # undefined-function warning visible.
+  @compile {:no_warn_undefined, MuonTrap.Daemon}
+
   @tee_device "/dev/tee0"
   @supplicant "/usr/sbin/tee-supplicant"
 

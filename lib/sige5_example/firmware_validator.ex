@@ -27,6 +27,13 @@ defmodule Sige5Example.FirmwareValidator do
   """
   use GenServer, restart: :transient
 
+  # vintage_net and muontrap are target-only deps, so a host compile cannot see
+  # them and warns on every reference. The code behind them only runs on a
+  # target - Application.start/2 gives :host an empty child list - so the
+  # warnings are noise rather than a signal, and silencing them keeps a real
+  # undefined-function warning visible.
+  @compile {:no_warn_undefined, VintageNet}
+
   require Logger
 
   # Reboot at the 15 minute mark if the firmware is still unvalidated.
