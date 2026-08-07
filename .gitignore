@@ -6,3 +6,7 @@ erl_crash.dump
 /log/
 flutter/out/
 .DS_Store
+
+# Device CA created by `mix sige5.provision`. Holds a private key that
+# issues fleet identities - it must never be committed.
+/ca/

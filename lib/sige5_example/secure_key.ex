@@ -31,6 +31,22 @@ defmodule Sige5Example.SecureKey do
 
   Requires a secure-world bootloader (`SECURE_WORLD=1 ./scripts/build-uboot.sh`)
   and a fused HUK.
+
+  ## This is an example, not a production configuration
+
+  It shows TrustZone working on an RK3576 and the claims above are accurate as
+  far as they go. What it does not do is make a device secure. Most importantly
+  there is **no verified boot**: nothing checks the bootloader, so whoever can
+  write the eMMC can boot their own and ask this token to sign. The key stays
+  unextractable; it does not stay exclusively yours.
+
+  The token PIN is also a constant in this file and cannot be otherwise on a
+  device that boots unattended, nothing uses the RPMB counter for rollback
+  protection, and the HUK is fused by the device itself on first boot rather
+  than in manufacturing.
+
+  See "What this does not give you" in the nerves_system_sige5 README before
+  reusing any of this.
   """
 
   require Logger
@@ -60,6 +76,7 @@ defmodule Sige5Example.SecureKey do
   @spec provision(keyword()) :: %{serial_number: String.t(), csr: String.t()}
   def provision(opts \\ []) do
     :ok = ensure_key(Keyword.get(opts, :force, false))
+    :ok = ensure_server()
 
     %{serial_number: serial_number(), csr: build_csr()}
   end
@@ -73,7 +90,27 @@ defmodule Sige5Example.SecureKey do
   @spec csr() :: String.t()
   def csr do
     :ok = ensure_key(false)
+    :ok = ensure_server()
     build_csr()
+  end
+
+  # The server opens a session on the token as it starts, so on a board that has
+  # never been provisioned it finds no token, its helper exits, and the
+  # :transient child stops for good. Everything up to `generate` then works and
+  # the CSR fails on a dead GenServer - which is what a first boot looked like:
+  # the token and key were created, then `provision/1` exited with "no process".
+  # Bring it back once there is something for it to open.
+  defp ensure_server do
+    if Process.whereis(Server) do
+      :ok
+    else
+      case Supervisor.restart_child(Sige5Example.Supervisor, Server) do
+        {:ok, _pid} -> :ok
+        {:ok, _pid, _info} -> :ok
+        {:error, :running} -> :ok
+        {:error, reason} -> raise "cannot start #{inspect(Server)}: #{inspect(reason)}"
+      end
+    end
   end
 
   @doc "The identifier NervesHub knows this device by."
