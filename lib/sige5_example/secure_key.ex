@@ -158,15 +158,42 @@ defmodule Sige5Example.SecureKey do
 
     unless token_initialised?() do
       Logger.info("[SecureKey] initialising the PKCS #11 token")
-      {:ok, _} = run(["init", @token], so_pin: true)
+      ok!(run(["init", @token], so_pin: true), "initialise the PKCS #11 token")
     end
 
     if force or not key_present?() do
       Logger.info("[SecureKey] generating an EC P-256 key inside the secure world")
-      {:ok, _} = run(["generate", @token, @key_label])
+      ok!(run(["generate", @token, @key_label]), "generate a key")
     end
 
     :ok
+  end
+
+  # A secure world with no trusted application to load looks like a working
+  # one until the first session is opened: /dev/tee0 is there, optee-key is
+  # there, and the PKCS#11 call fails deep inside libckteec. Matching on {:ok,
+  # _} turned that into a MatchError naming neither the cause nor the fix.
+  defp ok!({:ok, out}, _what), do: out
+
+  defp ok!({:error, reason}, what) do
+    if String.contains?(to_string(reason), "C_Initialize") do
+      raise """
+      Cannot #{what}: the secure world is present but no PKCS#11 trusted
+      application answered.
+
+      /dev/tee0 exists, so a BL32 is running, but /lib/optee_armtz holds no .ta
+      that this core will load - either the image was built without
+      SECURE_WORLD=1, or its TA was signed against a different core.
+
+      Build the pair together and flash both:
+
+          SECURE_WORLD=1 ./scripts/build-uboot.sh
+
+      #{reason}
+      """
+    else
+      raise "Cannot #{what}: #{reason}"
+    end
   end
 
   defp token_initialised? do
@@ -195,8 +222,7 @@ defmodule Sige5Example.SecureKey do
       X509.ASN1.certification_request_info(
         version: :v1,
         subject: :pubkey_cert_records.transform(subject(), :encode),
-        subjectPKInfo:
-          X509.PublicKey.wrap(public_key(), :CertificationRequestInfo_subjectPKInfo),
+        subjectPKInfo: X509.PublicKey.wrap(public_key(), :CertificationRequestInfo_subjectPKInfo),
         attributes: []
       )
 
@@ -229,5 +255,4 @@ defmodule Sige5Example.SecureKey do
       {out, code} -> {:error, "optee-key #{hd(args)} exited #{code}: #{String.trim(out)}"}
     end
   end
-
 end
