@@ -98,15 +98,35 @@ defmodule Sige5Example.SecureKey.Server do
   @impl GenServer
   def handle_info({port, {:exit_status, status}}, %{port: port} = state) do
     # A helper that dies on startup dies every time, so restarting it just
-    # spends the supervisor's budget and takes the application with it -
-    # which on a newly installed firmware means the validator never runs and
-    # the board rolls back. Stop normally instead: signing is unavailable,
-    # everything else keeps running, and available?/0 reports it.
+    # spends the supervisor's budget and takes the application with it. The
+    # child spec is :transient so this normal stop is respected - as a
+    # :permanent child it was restarted anyway, four times, which exceeded the
+    # supervisor's intensity and shut the application down. On a newly
+    # installed firmware that meant the validator never ran and the board
+    # reverted on its next boot.
     Logger.error("[SecureKey] optee-key exited #{status}; signing unavailable")
-    {:stop, :normal, state}
+    {:stop, :normal, %{state | port: nil}}
   end
 
   def handle_info(_message, state), do: {:noreply, state}
+
+  @impl GenServer
+  def terminate(_reason, %{port: port}) when is_port(port) do
+    # Closing the port does not stop what it spawned. optee-key blocks on a TEE
+    # session that may never open, so without this each stopped server leaves a
+    # live helper behind - four of them accumulated before this was noticed.
+    with {:os_pid, os_pid} <- Port.info(port, :os_pid) do
+      System.cmd("kill", ["-TERM", to_string(os_pid)], stderr_to_stdout: true)
+    end
+
+    Port.close(port)
+    :ok
+  catch
+    # The port may already be gone; nothing here is worth failing a shutdown.
+    _, _ -> :ok
+  end
+
+  def terminate(_reason, _state), do: :ok
 
   # The PKCS#11 TA is loaded from the filesystem by tee-supplicant. Without it
   # optee-key cannot open a session, so check before spawning rather than

@@ -205,9 +205,18 @@ defmodule Sige5Example.SecureKey do
 
   defp key_present?, do: match?({:ok, _}, run(["pubkey", @token, @key_label]))
 
+  # restart: :transient - the server stops normally when its helper cannot run,
+  # and a permanent child is restarted even then. Four restarts of a helper that
+  # exits every time is enough to exceed the supervisor's intensity and take the
+  # whole application down with it, which is how a board with a secure world but
+  # no usable session lost its firmware validation and reverted on the next boot.
+  # Transient restarts a crash and respects a normal stop.
   @doc false
   def server_child_spec,
-    do: {Server, token: @token, pin: @pin, key_label: @key_label}
+    do:
+      Supervisor.child_spec({Server, token: @token, pin: @pin, key_label: @key_label},
+        restart: :transient
+      )
 
   defp public_key, do: Server.public_key() |> X509.PublicKey.from_der!()
 
